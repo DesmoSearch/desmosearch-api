@@ -1,9 +1,17 @@
-#[macro_use] extern crate rocket;
-#[macro_use] extern crate serde_json;
+use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder, web::Path, Result};
+use serde_json::json;
 use serde::{Serialize, Deserialize};
+use std::fmt;
 
-#[get("/graphs/<id>")]
-fn get_graph(id: &str) -> Option<String> { 
+#[get("/")]
+async fn hello() -> impl Responder {
+  HttpResponse::Ok().body("Hello world!")
+}
+
+#[get("/graphs/{id}")]
+async fn get_graph(info: Path<String>) -> impl Responder {
+  let id = info.into_inner();
+  println!("{}", id);
   let connection = rusqlite::Connection::open("db").unwrap();
   let mut stmt = connection.prepare("SELECT * FROM graphs WHERE id = ?").unwrap();
   let mut rows = stmt.query([id]).ok()?;
@@ -20,7 +28,7 @@ fn get_graph(id: &str) -> Option<String> {
           }
         ).to_string())
        }
-      None => { None } //format!("id: {}, name: {}, creator: {}", cursor)
+      None => { Some("Not found!".to_string()) } //format!("id: {}, name: {}, creator: {}", cursor)
     }
     Err(_error) => { None }
   }
@@ -33,34 +41,84 @@ struct GraphData {
   creator: String
 }
 
-#[post("/graphs", data = "<input>")]
-fn set_graph(input: &str) -> Option<String> {
+#[derive(Serialize, Deserialize)]
+struct GraphDataList {
+  data: Vec<GraphData>
+}
+
+#[derive(Debug)]
+struct DatabaseError {
+  reason: String
+}
+impl DatabaseError {
+  fn new(msg: &str) -> DatabaseError {
+    DatabaseError{reason: msg.to_string()}
+  }
+}
+impl fmt::Display for DatabaseError {
+  fn fmt(&self, f: &mut fmt::Formatter) -> std::fmt::Result {
+    write!(f, "{}", self.reason)
+  }
+}
+impl std::error::Error for DatabaseError { 
+  fn description(&self) -> &str {
+    &self.reason
+  }
+}
+impl actix_web::ResponseError for DatabaseError {
+  fn error_response(&self) -> actix_web::HttpResponse {
+    actix_web::HttpResponse::build(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR).json("Database Error.")
+  }
+  // fn status_code(&self) -> actix_web::http::StatusCode {
+  //   actix_web::http::StatusCode::INTERNAL_SERVER_ERROR
+  // }
+}
+
+#[post("/graphs")]
+async fn post_graph(graph_data_list: web::Json<GraphDataList>) -> Result<String> {
   let connection = rusqlite::Connection::open("db").unwrap();
-  let mut stmt = connection.prepare("INSERT INTO graphs VALUES (?, ?, ?)").ok()?;
-  let graph_data = serde_json::from_str::<GraphData>(input); 
-  return match graph_data {
-    Ok(graph_data) => {
-      stmt.execute([graph_data.id, graph_data.name, graph_data.creator]).ok()?;
-      Some("Success!".to_string())
+  let maybe_stmt = connection.prepare("INSERT INTO graphs VALUES (?, ?, ?)");
+  match maybe_stmt {
+    Ok(mut stmt) => {
+      for graph_data in &graph_data_list.data {
+        let stmt_execution = stmt.execute([&graph_data.id, &graph_data.name, &graph_data.creator]);
+        match stmt_execution {
+          Ok(_) => {}
+          Err(_err) => {
+            return Err(actix_web::error::ErrorInternalServerError("Database failed to insert values."));
+          }
+        }
+      }
+      Ok("Successfully inserted graph data.".to_string())
     }
-    Err(_error) => {
-      Some("Malformed request.".to_string())
+    Err(_err) => {
+      Err(actix_web::error::ErrorInternalServerError("Database failed to load query."))
     }
   }
 }
 
-#[launch]
-fn rocket() -> _ {
+async fn manual_hello(req_body: String) -> impl Responder {
+  HttpResponse::Ok().body(req_body)
+}
+
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
   let connection = rusqlite::Connection::open("db").unwrap();
   connection.execute("
     CREATE TABLE IF NOT EXISTS graphs (id TEXT, name TEXT, creator TEXT);
-    INSERT INTO graphs VALUES ('vhqlyoddoa', 'Desmos Plane', 'Radian628');
   ", []).unwrap();
-  // connection.iterate("SELECT * FROM graphs WHERE creator = 'Radian628'", |results| {
-  //   for &(column, value) in results.iter() {
-  //     println!("{} = {}", column, value.unwrap())
-  //   }
-  //   true
-  // });
-  rocket::build().mount("/", routes![get_graph, set_graph])
+  connection.execute("
+  INSERT INTO graphs VALUES ('vhqlyoddoa', 'Desmos Plane', 'Radian628');
+  ", []).unwrap();
+
+  HttpServer::new(|| {
+    App::new()
+      .service(hello)
+      .service(get_graph)
+      .service(post_graph)
+      .route("/", web::get().to(manual_hello))
+  })
+  .bind("127.0.0.1:8000")?
+  .run()
+  .await
 }
