@@ -46,8 +46,8 @@ pub struct GraphQueryParams {
 }
 
 #[get("/graphs")]
-async fn get_graph(info: actix_web::web::Query<GraphQueryParams>) -> impl Responder {
-  let connection = rusqlite::Connection::open("db").unwrap();
+async fn get_graph(state: web::Data<DesmoSearchAPIState>, info: actix_web::web::Query<GraphQueryParams>) -> impl Responder {
+  let connection = &state.db_connection;//rusqlite::Connection::open("db").unwrap();
   let mut stmt = connection.prepare(&format!("SELECT * FROM graphs WHERE 
   id LIKE :id 
   AND name LIKE :name 
@@ -96,8 +96,8 @@ struct GraphDataList {
 }
 
 #[post("/graphs")]
-async fn post_graph(graph_data_list: web::Json<GraphDataList>) -> actix_web::Result<String> {
-  let connection = rusqlite::Connection::open("db").unwrap();
+async fn post_graph(state: web::Data<DesmoSearchAPIState>, graph_data_list: web::Json<GraphDataList>) -> actix_web::Result<String> {
+  let connection = &state.db_connection;
   let maybe_stmt = connection.prepare("INSERT INTO graphs VALUES (?, ?, ?, strftime('%s','now'))");
   match maybe_stmt {
     Ok(mut stmt) => {
@@ -122,6 +122,10 @@ async fn manual_hello(req_body: String) -> impl Responder {
   HttpResponse::Ok().body(req_body)
 }
 
+struct DesmoSearchAPIState {
+  db_connection: rusqlite::Connection,
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
   let connection = rusqlite::Connection::open("db").unwrap();
@@ -133,7 +137,11 @@ async fn main() -> std::io::Result<()> {
   ", []).unwrap();
 
   HttpServer::new(|| {
+    let connection2 = rusqlite::Connection::open("db").unwrap();
     App::new()
+      .data(DesmoSearchAPIState {
+        db_connection: connection2
+      })
       .service(hello)
       .service(get_graph)
       .service(post_graph)
