@@ -11,19 +11,51 @@ async fn hello() -> impl Responder {
 }
 
 #[derive(Debug, Deserialize)]
+pub enum GraphQueryOrdering {
+  #[serde(rename = "id")]
+  ID, 
+  #[serde(rename = "name")]
+  Name, 
+  #[serde(rename = "creator")]
+  Creator, 
+  #[serde(rename = "upload_date")]
+  UploadDate 
+}
+
+impl ToString for GraphQueryOrdering {
+  fn to_string(&self) -> String {
+    match self {
+      GraphQueryOrdering::ID => "id".to_owned(),
+      GraphQueryOrdering::Name => "name".to_owned(),
+      GraphQueryOrdering::Creator => "creator".to_owned(),
+      GraphQueryOrdering::UploadDate => "upload_date".to_owned()
+    }
+  }
+} 
+
+#[derive(Debug, Deserialize)]
 pub struct GraphQueryParams {
   id: Option<String>,
   name: Option<String>,
   creator: Option<String>,
   upload_date_start: Option<i64>,
-  upload_date_end: Option<i64>
+  upload_date_end: Option<i64>,
+  limit: Option<i64>,
+  offset: Option<i64>,
+  sort: Option<GraphQueryOrdering>
 }
 
 #[get("/graphs")]
 async fn get_graph(info: actix_web::web::Query<GraphQueryParams>) -> impl Responder {
-  //println!("{}", id);
+  println!("{}", info.sort.as_ref().unwrap_or(&GraphQueryOrdering::UploadDate).to_string());
   let connection = rusqlite::Connection::open("db").unwrap();
-  let mut stmt = connection.prepare("SELECT * FROM graphs WHERE id LIKE :id AND name LIKE :name AND creator LIKE :creator AND upload_date BETWEEN :upload_date_start AND :upload_date_end").unwrap();
+  let mut stmt = connection.prepare(&format!("SELECT * FROM graphs WHERE 
+  id LIKE :id 
+  AND name LIKE :name 
+  AND creator LIKE :creator 
+  AND upload_date BETWEEN :upload_date_start AND :upload_date_end
+  ORDER BY {sort}
+  LIMIT :limit OFFSET :offset", sort=info.sort.as_ref().unwrap_or(&GraphQueryOrdering::UploadDate).to_string())[..]).unwrap();
   let rows = stmt.query(
     named_params!{
       ":id": info.id.as_ref().unwrap_or(&"%".to_string()),
@@ -31,6 +63,8 @@ async fn get_graph(info: actix_web::web::Query<GraphQueryParams>) -> impl Respon
       ":creator": info.creator.as_ref().unwrap_or(&"%".to_string()),
       ":upload_date_start": info.upload_date_start.as_ref().unwrap_or(&0i64),
       ":upload_date_end": info.upload_date_end.as_ref().unwrap_or(&9223372036854775807),
+      ":limit": info.limit.as_ref().unwrap_or(&1i64),
+      ":offset": info.offset.as_ref().unwrap_or(&0i64)
     }
   ).map_err(actix_web::error::ErrorInternalServerError)?;
   let graph_data_list_data: Vec<GraphData> = rows.mapped(|row| {
