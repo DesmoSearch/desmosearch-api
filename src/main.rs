@@ -1,15 +1,17 @@
-use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder, web::Path, web::Query};
-use serde_json::json;
+use actix_web::{get, post, web, App, HttpRequest, HttpResponse, HttpServer, Responder, web::Path, web::Query};
 use serde::{Serialize, Deserialize};
-use std::fmt;
 use std::sync::Mutex;
+use actix_files::NamedFile;
+use std::path::PathBuf;
+
 
 use rusqlite::named_params;
 
-#[get("/")]
-async fn hello() -> impl Responder {
-  HttpResponse::Ok().body("Hello world!")
-}
+// #[get("/")]
+// async fn hello(req: HttpRequest) -> actix_web::Result<NamedFile> {
+//   let path: PathBuf = req.match_info().query("filename").parse().unwrap();
+//   Ok(NamedFile::open(path)?)
+// }
 
 #[derive(Debug, Deserialize)]
 pub enum GraphQueryOrdering {
@@ -50,9 +52,7 @@ pub struct GraphQueryParams {
   sort: Option<GraphQueryOrdering>
 }
 
-#[get("/graphs")]
-async fn get_graph(state: web::Data<DesmoSearchAPIState>, info: actix_web::web::Query<GraphQueryParams>) -> impl Responder {
-  let connection = state.db_connection.lock().unwrap();//rusqlite::Connection::open("db").unwrap();
+fn get_graph_from_db(connection: &std::sync::MutexGuard<rusqlite::Connection>, info: actix_web::web::Query<GraphQueryParams>) -> actix_web::Result<GraphDataList> {
   let mut stmt = connection.prepare(&format!("SELECT * FROM graphs WHERE 
   id LIKE :id 
   AND parent_id LIKE :parent_id 
@@ -84,10 +84,26 @@ async fn get_graph(state: web::Data<DesmoSearchAPIState>, info: actix_web::web::
   }).map(|gd| {
     gd.map_err(actix_web::error::ErrorInternalServerError)
   }).collect::<Result<Vec<GraphData>,actix_web::error::Error>>()?;
-  let graph_data_list = GraphDataList { 
+  Ok(GraphDataList { 
     data: graph_data_list_data
-  };
-  return Ok::<String, actix_web::error::Error>(serde_json::to_string(&graph_data_list).unwrap())
+  })
+}
+
+#[get("/graphs")]
+async fn get_graph(state: web::Data<DesmoSearchAPIState>, info: actix_web::web::Query<GraphQueryParams>) -> impl Responder {
+  let connection = state.db_connection.lock().unwrap();//rusqlite::Connection::open("db").unwrap();
+  let graph_data_list = get_graph_from_db(&connection, info);
+  match graph_data_list {
+    Ok(data) => {
+      HttpResponse::Ok()
+        .content_type("application/json")
+        .header("Access-Control-Allow-Origin", "*")
+        .body(serde_json::to_string(&data).unwrap())
+    }
+    Err(err) => {
+      HttpResponse::from_error(err)
+    }
+  }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -131,6 +147,16 @@ struct DesmoSearchAPIState {
   db_connection: Mutex<rusqlite::Connection>,
 }
 
+#[cfg(debug_assertions)]
+fn getFrontendPath() -> &'static str {
+  "./frontend/desmosearch-browser/public"
+}
+
+#[cfg(not(debug_assertions))]
+fn getFrontendPath() -> &'static str {
+  "./frontend/desmosearch-browser/build"
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
   let connection = rusqlite::Connection::open("db").unwrap();
@@ -149,7 +175,7 @@ async fn main() -> std::io::Result<()> {
       })
       .data(actix_web::web::PayloadConfig::new(1 << 25))
       .data(actix_web::web::JsonConfig::default().limit(1024 * 1024 * 32))
-      .service(hello)
+      .service(actix_files::Files::new("/static", getFrontendPath()))
       .service(get_graph)
       .service(post_graph)
       .route("/", web::get().to(manual_hello))
