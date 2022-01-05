@@ -47,7 +47,6 @@ pub struct GraphQueryParams {
 
 #[get("/graphs")]
 async fn get_graph(info: actix_web::web::Query<GraphQueryParams>) -> impl Responder {
-  println!("{}", info.sort.as_ref().unwrap_or(&GraphQueryOrdering::UploadDate).to_string());
   let connection = rusqlite::Connection::open("db").unwrap();
   let mut stmt = connection.prepare(&format!("SELECT * FROM graphs WHERE 
   id LIKE :id 
