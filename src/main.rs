@@ -1,44 +1,60 @@
-use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder, web::Path, Result};
+use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder, web::Path, web::Query};
 use serde_json::json;
 use serde::{Serialize, Deserialize};
 use std::fmt;
+
+use rusqlite::named_params;
 
 #[get("/")]
 async fn hello() -> impl Responder {
   HttpResponse::Ok().body("Hello world!")
 }
 
-#[get("/graphs/{id}")]
-async fn get_graph(info: Path<String>) -> impl Responder {
-  let id = info.into_inner();
-  println!("{}", id);
+#[derive(Debug, Deserialize)]
+pub struct GraphQueryParams {
+  id: Option<String>,
+  name: Option<String>,
+  creator: Option<String>,
+  upload_date_start: Option<i64>,
+  upload_date_end: Option<i64>
+}
+
+#[get("/graphs")]
+async fn get_graph(info: actix_web::web::Query<GraphQueryParams>) -> impl Responder {
+  //println!("{}", id);
   let connection = rusqlite::Connection::open("db").unwrap();
-  let mut stmt = connection.prepare("SELECT * FROM graphs WHERE id = ?").unwrap();
-  let mut rows = stmt.query([id]).ok()?;
-  //cursor.bind_by_name(vec![(":id", sqlite::Value::String(id.to_owned()))]).unwrap();
-  let next_row = rows.next();
-  return match next_row {
-    Ok(maybe_row) => match maybe_row { 
-      Some(row) => {
-        Some(json!(
-          {
-            "id": row.get::<&str, String>("id").unwrap(),
-            "name": row.get::<&str, String>("name").unwrap(),
-            "creator": row.get::<&str, String>("creator").unwrap(),
-          }
-        ).to_string())
-       }
-      None => { Some("Not found!".to_string()) } //format!("id: {}, name: {}, creator: {}", cursor)
+  let mut stmt = connection.prepare("SELECT * FROM graphs WHERE id LIKE :id AND name LIKE :name AND creator LIKE :creator AND upload_date BETWEEN :upload_date_start AND :upload_date_end").unwrap();
+  let rows = stmt.query(
+    named_params!{
+      ":id": info.id.as_ref().unwrap_or(&"%".to_string()),
+      ":name": info.name.as_ref().unwrap_or(&"%".to_string()),
+      ":creator": info.creator.as_ref().unwrap_or(&"%".to_string()),
+      ":upload_date_start": info.upload_date_start.as_ref().unwrap_or(&0i64),
+      ":upload_date_end": info.upload_date_end.as_ref().unwrap_or(&9223372036854775807),
     }
-    Err(_error) => { None }
-  }
+  ).map_err(actix_web::error::ErrorInternalServerError)?;
+  let graph_data_list_data: Vec<GraphData> = rows.mapped(|row| {
+    Ok(GraphData {
+      id: row.get::<&str, String>("id").unwrap(),
+      name: row.get::<&str, String>("name").unwrap(),
+      creator: row.get::<&str, String>("creator").unwrap(),
+      upload_date: Some(row.get::<&str, i64>("upload_date").unwrap())
+    })
+  }).map(|gd| {
+    gd.map_err(actix_web::error::ErrorInternalServerError)
+  }).collect::<Result<Vec<GraphData>,actix_web::error::Error>>()?;
+  let graph_data_list = GraphDataList { 
+    data: graph_data_list_data
+  };
+  return Ok::<String, actix_web::error::Error>(serde_json::to_string(&graph_data_list).unwrap())
 }
 
 #[derive(Serialize, Deserialize)]
 struct GraphData {
   id: String,
   name: String,
-  creator: String
+  creator: String,
+  upload_date: Option<i64>
 }
 
 #[derive(Serialize, Deserialize)]
@@ -46,38 +62,10 @@ struct GraphDataList {
   data: Vec<GraphData>
 }
 
-#[derive(Debug)]
-struct DatabaseError {
-  reason: String
-}
-impl DatabaseError {
-  fn new(msg: &str) -> DatabaseError {
-    DatabaseError{reason: msg.to_string()}
-  }
-}
-impl fmt::Display for DatabaseError {
-  fn fmt(&self, f: &mut fmt::Formatter) -> std::fmt::Result {
-    write!(f, "{}", self.reason)
-  }
-}
-impl std::error::Error for DatabaseError { 
-  fn description(&self) -> &str {
-    &self.reason
-  }
-}
-impl actix_web::ResponseError for DatabaseError {
-  fn error_response(&self) -> actix_web::HttpResponse {
-    actix_web::HttpResponse::build(actix_web::http::StatusCode::INTERNAL_SERVER_ERROR).json("Database Error.")
-  }
-  // fn status_code(&self) -> actix_web::http::StatusCode {
-  //   actix_web::http::StatusCode::INTERNAL_SERVER_ERROR
-  // }
-}
-
 #[post("/graphs")]
-async fn post_graph(graph_data_list: web::Json<GraphDataList>) -> Result<String> {
+async fn post_graph(graph_data_list: web::Json<GraphDataList>) -> actix_web::Result<String> {
   let connection = rusqlite::Connection::open("db").unwrap();
-  let maybe_stmt = connection.prepare("INSERT INTO graphs VALUES (?, ?, ?)");
+  let maybe_stmt = connection.prepare("INSERT INTO graphs VALUES (?, ?, ?, strftime('%s','now'))");
   match maybe_stmt {
     Ok(mut stmt) => {
       for graph_data in &graph_data_list.data {
@@ -105,10 +93,10 @@ async fn manual_hello(req_body: String) -> impl Responder {
 async fn main() -> std::io::Result<()> {
   let connection = rusqlite::Connection::open("db").unwrap();
   connection.execute("
-    CREATE TABLE IF NOT EXISTS graphs (id TEXT, name TEXT, creator TEXT);
+    CREATE TABLE IF NOT EXISTS graphs (id TEXT, name TEXT, creator TEXT, upload_date INTEGER);
   ", []).unwrap();
   connection.execute("
-  INSERT INTO graphs VALUES ('vhqlyoddoa', 'Desmos Plane', 'Radian628');
+  INSERT INTO graphs VALUES ('vhqlyoddoa', 'Desmos Plane', 'Radian628', strftime('%s','now'));
   ", []).unwrap();
 
   HttpServer::new(|| {
