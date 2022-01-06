@@ -12,7 +12,7 @@ code {
     monospace;
 }
 
-h1 {
+header * {
   text-align: center;
 }
 
@@ -33,4 +33,27 @@ h1 {
   width: 100%;
   border-radius: 10px;
   margin: auto;
+}
+
+nav {
+  display: flex;
+  justify-content: space-evenly;
+}
+
+.search-criteria {
+  display: flex;
+  justify-content: left;
+  width: 80%;
+  margin: auto;
+  flex-wrap: wrap;
+}
+.search-criteria div {
+  width: 200px;
+}
+
+.search-criteria div label {
+  margin-right: 10px;
+}
+.search-criteria div input, .search-criteria div option {
+  margin-right: 30px;
 }
