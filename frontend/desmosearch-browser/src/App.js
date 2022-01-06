@@ -15,7 +15,7 @@ function GraphPreview(props) {
 }
 
 function isUserCloseToBottom() {
-  return window.scrollY + window.innerHeight + 100 > document.body.getBoundingClientRect().height;
+  return window.scrollY + window.innerHeight + 300 > document.body.getBoundingClientRect().height;
 }
 
 function GraphGallery(props) {
@@ -130,8 +130,11 @@ function App() {
   return (
     <div>
       <header>
-        <h1>Desmosearch!</h1>
-        <p>(not affiliated with Desmos)</p>
+        <div>
+          <h1>Desmosearch!</h1>
+          <p>(not affiliated with Desmos)</p>
+        </div>
+        <img alt="desmosearch logo" className="logo" src="logo512.png"></img>
       </header>
       <SearchCriteria changeSearchQuery={changeSearchQuery}></SearchCriteria>
       <GraphGallery queryState={queryState} shouldEraseGraphs={shouldEraseGraphs} setShouldEraseGraphs={setShouldEraseGraphs}></GraphGallery>

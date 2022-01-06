@@ -163,9 +163,9 @@ async fn main() -> std::io::Result<()> {
   connection.execute("
     CREATE TABLE IF NOT EXISTS graphs (id TEXT, parent_id TEXT, name TEXT, creator TEXT, upload_date INTEGER);
   ", []).unwrap();
-  connection.execute("
-  INSERT INTO graphs VALUES ('vhqlyoddoa', 'unknown', 'Desmos Plane', 'Radian628', strftime('%s','now'));
-  ", []).unwrap();
+  // connection.execute("
+  // INSERT INTO graphs VALUES ('vhqlyoddoa', 'unknown', 'Desmos Plane', 'Radian628', strftime('%s','now'));
+  // ", []).unwrap();
 
   HttpServer::new(|| {
     let connection2 = rusqlite::Connection::open("db").unwrap();

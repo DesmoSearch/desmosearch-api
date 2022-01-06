@@ -12,10 +12,6 @@ code {
     monospace;
 }
 
-header * {
-  text-align: center;
-}
-
 .graph-gallery ul {
   display: flex;
   flex-wrap: wrap;
@@ -54,6 +50,27 @@ nav {
 .search-criteria div label {
   margin-right: 10px;
 }
-.search-criteria div input, .search-criteria div option {
+.search-criteria div input, .search-criteria div select {
   margin-right: 30px;
+  width: 150px;
+}
+
+
+header * {
+  text-align: center;
+  word-wrap: break-word;
+  min-width: 0;
+}
+
+header {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+
+.logo {
+  height: 126px;
+  float: right;
+  margin-left: 30px;
 }
