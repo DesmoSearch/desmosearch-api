@@ -2,13 +2,18 @@
 API and site for discovering, cataloguing, and keeping track of publicly-available Desmos graphs. Not affiliated with Desmos. This project is currently in a very early stage of development, so expect lots of breaking changes for the time being.
 
 ## Hosting
-To host desmosearch-api, follow these instructions:
+
+### Initial Setup
+To host desmosearch-api, follow these instructions *the first time* you intend to run it:
 1. Install [Nodejs](https://nodejs.org/en/) and [Rust](https://www.rust-lang.org/tools/install) if you have not already.
 2. Clone this repository.
 3. Navigate to the root directory of the repository, and run `cargo run --release`. This will run the backend (web server). The backend is the server that exposes the API that allows for the querying of Desmos graphs, and also allows users to access the frontend. This may take a while the first time, as it will have to compile the backend from scratch.
 4. Navigate to `frontend/desmosearch-browser`, run `npm install`, and then run `npm run build` to compile the frontend- in other words, the website that lists the Desmos graphs. 
 5. (Optional) Go to the `test_dataset` directory, run `npm install`, and then run `npm start`. This will upload about 130000 graphs to the database (which would otherwise be empty).
 6. Navigate to the page `http://localhost:8000/static/index.html` to view the frontend. If you see a page of Desmos graphs appear, you're good to go!
+
+### Subsequent Setup
+If you close the server and wish to run it again, all you need to do is navigate to the root directory of the repository, and run `cargo run --release`, as everything else will have been set up already.
 
 ## API Documentation
 The Desmosearch API has a single endpoint at `/graphs`. This will- by default- show you a single graph. By appending a querystring to the URL (examples below), you can sort and filter the content to your liking.
